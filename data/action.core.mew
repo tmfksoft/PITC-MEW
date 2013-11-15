@@ -1,0 +1,31 @@
+<mew>
+	<snippet>
+		<func>wave</func>
+		<regex>^waves (to|at)$</regex>
+		<code><![CDATA[
+			$api->action($chan,"waves back to ".$nick);
+		]]></code>
+	</snippet>
+	<snippet>
+		<func>LICK ME LICK ME WEEE</func>
+		<regex>^licks$</regex>
+		<cod><![CDATA[
+			$api->action($chan,"licked ".smile('confused'));
+		]]></code>
+	</snippet>
+	<snippet>
+		<func>MEW I CHOOSE YOU</func>
+		<regex>^throws a pokeball at$</regex>
+		<code><![CDATA[
+			$api->nick("mewtwo");
+			$quotes = array();
+			$quotes[] = "Behold my powers! I am the most powerful Pokémon in the world!";
+			$quotes[] = "Human and Pokemon can *NEVER* be friends.";
+			$quotes[] = "I wasn't born a Pokémon, I was created; and my creators have used and betrayed me! So, I stand alone!";
+			$quotes[] = "Your Charizard is poorly trained.";
+			$qt = $quotes[array_rand($quotes)];
+			$api->msg($chan,$qt);
+			$api->nick($me);
+		]]></code>
+	</snippet>
+</mew>
