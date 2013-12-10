@@ -49,6 +49,7 @@
 					}
 					else {
 						$api->msg($chan,"uhm ".smile('confused'));
+						$api->log("Unknown feedback.");
 					}
 				}
 			} else {

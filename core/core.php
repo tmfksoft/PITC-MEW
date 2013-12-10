@@ -10,19 +10,13 @@
 // One line you may want to tweak.
 $refresh = "5000";
 
-/*
- * You can tweak the refresh from within PITC to find a suitable speed.
- * Use '/refresh' to return the current speed.
- * Use '/refresh value' to set the refresh speed.
- */
- 
- // DO NOT EDIT ANY CODE IN THIS FILE, You not longer need to.
+// DO NOT EDIT ANY CODE IN THIS FILE, You not longer need to.
  
  // DEBUG
 	$keybuff_arr = array();
  // END DEBUG
  
-echo "Loading...\n";
+echo " [PITC] Loading...\n";
 declare(ticks = 1);
 @ini_set("memory_limit","8M"); // Ask for more memory
 stream_set_blocking(STDIN, 0);
@@ -30,6 +24,8 @@ stream_set_blocking(STDOUT, 0);
 error_reporting(0); // Shut PHP's Errors up so we can handle it ourselves.
 set_error_handler("pitcError");
 register_shutdown_function("pitcFatalError");
+
+// Some Variables
 $log_irc = true; // Log IRC to the main window as well?
 $rawlog = array();
 $start_stamp = time();
@@ -37,9 +33,10 @@ $rawlog = array();
 $ctcps = array();
 $error_log = array();
 $timers = array();
+$_PITC = array(); // Everything useful in this.
 
 $_DEBUG = array(); // Used to set global vars for /dump from within functions.
-$loaded = array(); // Loaded scripts.
+$loaded = array();
 
 if (isset($argv[1]) && $argv[1] == "-a") {
 	$autoconnect = true;
@@ -59,7 +56,7 @@ else {
 }
 
 // Init some Variables.
-$version = "1.4"; // Do not change this!
+$version = "1.5"; // Do not change this!
 $append = "Bots"; // Likewise Unless you're forking
 
 if (file_exists($_SERVER['PWD']."/core/functions.php")) {
@@ -69,6 +66,9 @@ else {
 	die("Missing Functions.php! PITC{$append} CANNOT Function without this.");
 }
 
+// Turn off echo's
+//ob_start();
+
 if (file_exists($_SERVER['PWD']."/core/config.php")) {
 	include($_SERVER['PWD']."/core/config.php");
 }
@@ -76,22 +76,40 @@ else {
 	shutdown("ERROR Loading Config.php!\n");
 }
 
-if (!file_exists($_SERVER['PWD']."/core/config.cfg")) {
-	stream_set_blocking(STDIN, 1);
-	run_config();
-	sleep(1);
-	stream_set_blocking(STDIN, 0);
+if (file_exists($_SERVER['PWD']."/core/database.php")) {
+	include($_SERVER['PWD']."/core/database.php");
+}
+else {
+	shutdown("ERROR Loading Database.php!\n");
 }
 
-// Load the config and language pack.
-$_CONFIG = load_config();
-if (isset($_CONFIG['lang'])) {
-	$language = $_CONFIG['lang'];
+if ($cfg->exists("core")) {
+	$loaded = $cfg->load("core");
+	if (!$loaded) {
+		die("Unable to load configuration!");
+	}
+	// Fill in missing values.
+	$cfg->applydefault("core",$cfg->getdef("core"));
+} else {
+	$cfg->create("core",$cfg->getdef("core"));
+	$cfg->save("core");
+	$core->internal("PITC Configuration Missing!");
+	$core->internal("Default configuration created please edit configs/core.cfg");
+	die();
+}
+
+if ($cfg->get("core","lang") !== FALSE) {
+	$language = $cfg->get("core","lang");
 }
 else {
 	$language = "en";
 }
 $lng = array();
+// Load English as a default language.
+if (file_exists("langs/en.lng")) {
+		eval(file_get_contents("langs/en.lng"));
+}
+// Load other languages over the top of it.
 if (file_exists("langs/".$language.".lng")) {
 	eval(file_get_contents("langs/".$language.".lng"));
 }
@@ -139,11 +157,10 @@ $api_tick = array();
 $api_raw = array();
 $api_start = array();
 $api_stop = array();
-$_PITC = array();
 
 // PITC Variables
-$_PITC['nick'] = $_CONFIG['nick'];
-$_PITC['altnick'] = $_CONFIG['altnick'];
+$_PITC['nick'] = $cfg->get("core","nick");
+$_PITC['altnick'] = $cfg->get("core","altnick");
 $_PITC['network'] = false;
 $_PITC['server'] = false;
 $_PITC['address'] = false;
@@ -190,24 +207,24 @@ if (file_exists($_SERVER['PWD']."/scripts/autoload")) {
 if ($_SERVER['TERM'] == "screen") {
 	$core->internal(" = {$lng['SCREEN']} =");
 }
-$ann = data_get("http://announcements.pitc.x10.mx/");
-if ($ann != false && $ann->message != "none") { $core->internal(" ".$ann->message); }
+$ann = data_get("http://announcements.pitc.x10.mx/?bots");
+if ($ann != false && $ann->message != "none") { $core->internal(" [Announcement] ".$ann->message); }
 
 // Connect!
-$core->internal(" = {$lng['CONN_DEF']} (".$_CONFIG['address'].") =");
-$address = $_CONFIG['address'];
+$core->internal(" [INFO] {$lng['CONN_DEF']} (".$cfg->get("core","address").")");
+$address = $cfg->get("core","address");
 $_PITC['address'] = $address;
 
 $address = explode(":",$address);
 if (isset($address[1]) && is_numeric($address[1])) { $port = $address[1]; }
 else { $port = 6667; }
-if (isset($text[2])) { $password = $text[2]; } else { if (isset($_CONFIG['password'])) { $password = $_CONFIG['password']; } else { $password = false; } }
+if (isset($text[2])) { $password = $text[2]; } else { if ($cfg->get("core","password")) { $password = $cfg->get("core","password"); } else { $password = false; } }
 $ssl = false;
 if ($port[0] == "+") { $ssl = true; }
 
-$sid = connect($_CONFIG['nick'],$address[0],$port,$ssl,$password);
+$sid = connect($cfg->get("core","nick"),$address[0],$port,$ssl,$password);
 if (!$sid) {
-	$core->internal(" = {$lng['CONN_ERROR']} =");
+	$core->internal(" [ERROR] {$lng['CONN_ERROR']}");
 	unset($sid);
 }
 else {
@@ -230,8 +247,11 @@ if (function_exists('pcntl_signal')) {
 	//*/
 }
 else {
-	$core->internal(" = Your installation of PHP lacks the PCNTL Module! Load it for the Shutdown handler. =");
+	$core->internal(" [INFO] Your installation of PHP lacks the PCNTL Module! Load it for the Shutdown handler. =");
 }
+
+// Loaded and started
+$core->internal(" [INFO] PITC{$append} v{$version} Started ".date('h:ia d-m-Y'));
 
 while (1) {
 	
@@ -264,14 +284,14 @@ while (1) {
 				}
 				else if (isset($irc_data[1]) && ($irc_data[1] == "CAP" && $irc_data[4] == ":sasl")) {
 					// SASL Time.
-					if (isset($_CONFIG['sasl']) && strtolower($_CONFIG['sasl']) == "y") {
+					if ($cfg->get("core","sasl") && strtolower($cfg->get("core","sasl")) == "y") {
 						$core->internal(" = IRC Network supports SASL, Using SASL! =");
 						pitc_raw("AUTHENTICATE PLAIN");
 					}
 				}
 				else if ($irc_data[0] == "AUTHENTICATE" && $irc_data[1] == "+") {
-					if (isset($_CONFIG['sasl']) && strtolower($_CONFIG['sasl']) == "y") {
-						$enc = base64_encode(chr(0).$_CONFIG['sasluser'].chr(0).$_CONFIG['saslpass']);
+					if ($cfg->get("core","sasl") && strtolower($cfg->get("core","sasl")) == "y") {
+						$enc = base64_encode(chr(0).$cfg->get("core","sasluser").chr(0).$cfg->get("core","saslpass"));
 						pitc_raw("AUTHENTICATE {$enc}");
 					}
 				}
@@ -314,13 +334,17 @@ while (1) {
 						}
 					}
 					$users = $udata;
-					
-					$chan = strtolower($irc_data[4]);
-					$users[0] = substr($users[0],1);
-					$core->internal($colors->getColoredString(" [ ".implode(" ",uListSort($users))." ]","cyan"));
-					$userlist[$chan] = array_merge($userlist[$chan],$users);
-					$userlist[$chan] = uListSort($userlist[$chan]);
-					array_values($userlist[$chan]);
+					if (isset($irc_data[4])) {
+						$chan = strtolower($irc_data[4]);
+						$users[0] = substr($users[0],1);
+						$core->internal($colors->getColoredString(" [{$chan}] [ ".implode(" ",uListSort($users))." ]","cyan"));
+						$userlist[$chan] = array_merge($userlist[$chan],$users);
+						$userlist[$chan] = uListSort($userlist[$chan]);
+						array_values($userlist[$chan]);
+					} else {
+						$core->internal(" Error parsing userlist RAW. Got:");
+						$core->internal(" ".trim(implode(chr(32),$irc_data)));
+					}
 				}
 				else if (isset($irc_data[1]) && $irc_data[1] == "324") {
 					$mode = $irc_data[4];
@@ -333,11 +357,11 @@ while (1) {
 				}
 				else if (isset($irc_data[1]) && $irc_data[1] == "311") {
 					// WHOIS.
-					$core->internal(" = WHOIS for {$irc_data[3]} =");
-					$core->internal(" * {$irc_data[3]} is ".implode(" ",array_slice($irc_data,4)));
+					$core->internal(" [SELF] = WHOIS for {$irc_data[3]} =");
+					$core->internal(" [SELF] * {$irc_data[3]} is ".implode(" ",array_slice($irc_data,4)));
 				}
 				else if (isset($irc_data[1]) && ($irc_data[1] == "379" || $irc_data[1] == "378")) {
-					$core->internal(" * Whois data");
+					$core->internal(" [SELF] * Whois data");
 				}
 				else if (isset($irc_data[1]) && $irc_data[1] == "PRIVMSG") {
 					$ex = explode("!",$irc_data[0]);
@@ -392,7 +416,7 @@ while (1) {
 						$windows[] = $win;
 						$wid = getWid($win);
 						// Wat.
-						$core->internal($colors->getColoredString(" = {$lng['MSG_IN']} [".$wid.":".$win."] {$lng['FROM']} ".$source." = ","cyan"));
+						$core->internal($colors->getColoredString(" [{$source}] = {$lng['MSG_IN']} [".$wid.":".$win."] {$lng['FROM']} ".$source." = ","cyan"));
 						// Get the new id.
 					}
 
@@ -409,10 +433,10 @@ while (1) {
 						// Check for Highlight!
 						if (isHighlight($words_string,$cnick)) {
 							// Highlight!
-							$core->internal($colors->getColoredString($target.": * ".$source." ".$words_string,"yellow"));
+							$core->internal($colors->getColoredString(" [{$target}] * ".$source." ".$words_string,"yellow"));
 						}
 						else {
-							$core->internal($colors->getColoredString($target.": * ".$source." ".$words_string,"purple"));
+							$core->internal($colors->getColoredString(" [{$target}] * ".$source." ".$words_string,"purple"));
 						}
 						// API TIME!
 						$args = array();
@@ -434,10 +458,10 @@ while (1) {
 							//$scrollback[$wid][] = $cnick." ".$_CONFIG['nick']." ".stripos($message,$cnick)." ".stripos($message,$_CONFIG['nick']); // H/L Debug
 							if (isHighlight($message,$cnick)) {
 								// Highlight!
-								$core->internal($colors->getColoredString($target.": <".$source."> ".$message,"yellow"));
+								$core->internal(" [{$target}] ".$colors->getColoredString(" <".$source."> ".$message,"yellow"));
 							}
 							else {
-								$core->internal($target.": <".$source."> ".format_text($message));
+								$core->internal(" [{$target}] <".$source."> ".format_text($message));
 							}
 							// API TIME!
 							$args = array();
@@ -466,10 +490,10 @@ while (1) {
 					}
 					if ($nick != $cnick) {
 						// someone changed their nick, Lets return the shizzle for them.
-						$string = $colors->getColoredString("  * ".$nick." {$lng['NICK_OTHER']} ".$nnick, "green");
+						$string = $colors->getColoredString(" [{$nick}] * ".$nick." {$lng['NICK_OTHER']} ".$nnick, "green");
 					}
 					else {
-						$string = $colors->getColoredString("  * {$lng['NICK_SELF']} ".$nnick, "green");
+						$string = $colors->getColoredString(" [{$nick}] * {$lng['NICK_SELF']} ".$nnick, "green");
 						$cnick = $nnick;
 					}
 					// No more shiny code, We dont care where they're in.
@@ -486,11 +510,11 @@ while (1) {
 					// Lost connection!
 					$message = array_slice($irc_data,1);
 					$message = substr(implode(" ",$message),1);
-					$scrollback[0][] = $colors->getColoredString(" = ".$message." =","blue");
+					$core->internal(" [SELF] ".$colors->getColoredString(" = ".$message." =","blue"));
 					$x = 0;
 					while ($x != key($scrollback)) {
 						if (isset($scrollback[$x])) {
-							$core->internal($colors->getColoredString(" = {$lng['DISCONNECTED']} ".$_PITC['address']." {$lng['RECONNECT']} =","blue"));
+							$core->internal($colors->getColoredString(" [SELF] = {$lng['DISCONNECTED']} ".$_PITC['address']." {$lng['RECONNECT']} =","blue"));
 						}
 						$x++;
 					}
@@ -514,15 +538,15 @@ while (1) {
 					if ($dest[0] == "#") {
 						// Channel notice.
 						$wid = getWid($dest);
-						$scrollback[$wid][] = $colors->getColoredString(" -".$nick.":".$dest."- ".$message, "red");
+						$core->internal(" [SELF] ".$colors->getColoredString(" -".$nick.":".$dest."- ".$message, "red"));
 					}
 					else {
 						// Private notice. Forward to Status window
 						if ($msg_d[0][0] == "" && $msg_d_lchar == "") {
-							$scrollback['0'][] = $colors->getColoredString(" <- [".$nick." ".$ctcp." reply]: ".$ctcp_data, "light_red");
+							$core->internal(" [{$nick}] ".$colors->getColoredString(" <- [".$nick." ".$ctcp." reply]: ".$ctcp_data, "light_red"));
 						}
 						else {
-							$scrollback['0'][] = $colors->getColoredString(" -".$nick."- ".$message, "red");
+							$core->internal(" [{$nick}] ".$colors->getColoredString(" -".$nick."- ".$message, "red"));
 						}
 					}
 				}
@@ -530,7 +554,7 @@ while (1) {
 					// IRCD Threw an error regarding a command :o
 					$message = array_slice($irc_data, 4);
 					$message = substr(implode(" ",$message),1);
-					$scrollback[0][] = strtoupper($irc_data[3])." ".$message;
+					$core->internal(" [SELF] ".strtoupper($irc_data[3])." ".$message);
 				}
 				else if (isset($irc_data[1]) && $irc_data[1] == "404") {
 					// 3 - chan
@@ -538,13 +562,8 @@ while (1) {
 					$message = substr(implode(" ",$message),1);
 					$scrollback[getWid($irc_data['3'])][] = $colors->getColoredString(" = ".$message." =","light_red");
 				}
-				else if (isset($irc_data[1]) && ($irc_data[1] == "004" || $irc_data[1] == "002" || $irc_data[1] == "003")) {
-					$message = array_slice($irc_data, 3);
-					$message = implode(" ",$message);
-					$core->internal(" [{$_PITC['network']}] ".$message);
-				}
 				else if (isset($irc_data[1]) && $irc_data[1] == "005") {
-					$core->internal(" = Supressed IRCD supported commands and settings.. =");
+					$core->internal(" [{$_PITC['network']}] Supressed IRCD supported commands and settings..");
 				}
 				else if (isset($irc_data[1]) && $irc_data[1] == "366") {
 					// Doing nothing suppresses this.
@@ -563,32 +582,40 @@ while (1) {
 					// Doing nothing suppresses this.
 				}
 				else if (isset($irc_data[1]) && $irc_data[1] == "TOPIC") {
-					$chan = $irc_data[2];
+					$chan = trim($irc_data[2]);
 					$wid = getWid($chan);
 					$ex = explode("!",$irc_data[0]);
 					$nick = substr($ex[0],1);
 					$message = array_slice($irc_data, 3);
 					$message = substr(implode(" ",$message),1);
 					$chan_topic[$wid] = $message;
-					$core->internal($colors->getColoredString("  * ".$nick." {$lng['TOPIC_CHANGE']} '".$message."'", "green"));
+					$core->internal($colors->getColoredString(" [{$chan}] * ".$nick." {$lng['TOPIC_CHANGE']} '".$message."'", "green"));
 				}
 				else if (isset($irc_data[1]) && $irc_data[1] == "332") {
 					// Topic.
-					$chan = $irc_data[3];
+					$chan = trim($irc_data[3]);
 					$message = array_slice($irc_data, 4);
-					$message = substr(implode(" ",$message),1);
+					$message = trim(substr(implode(" ",$message),1));
 					$chan_topic[$chan] = $message;
-					$core->internal($colors->getColoredString("  * {$lng['TOPIC_IS']} '".format_text($message)."'","green"));
+					$str = " [{$chan}] * {$lng['TOPIC_IS']} '".format_text($message)."'";
+					$shell_cols = exec('tput cols');
+					if (!is_numeric($shell_cols)) {
+						$shell_cols = 80;
+					}
+					if (strlen($str) > $shell_cols) {
+						$str = substr($str,0,$shell_cols-13)."'...";
+					}
+					$core->internal($colors->getColoredString($str,"green"));
 				}
 				else if (isset($irc_data[1]) && $irc_data[1] == "329") {
 					// Channel creation date, No use to us.
 				}
 				else if (isset($irc_data[1]) && $irc_data[1] == "333") {
-					$chan = $irc_data[3];
+					$chan = trim($irc_data[3]);
 					$ex = explode("!",$irc_data[4]);
 					$nick = $ex[0];
 					$date = date(DATE_RFC822,trim($irc_data[5]));
-					$core->internal($colors->getColoredString("  * {$lng['TOPIC_BY']} ".$nick." ".$date,"green"));
+					$core->internal($colors->getColoredString(" [{$chan}] * {$lng['TOPIC_BY']} ".$nick." ".$date,"green"));
 				}
 				else if (isset($irc_data[1]) && $irc_data[1] == "MODE") {
 					$chan = strtolower($irc_data[2]);
@@ -605,7 +632,7 @@ while (1) {
 						pitc_raw("NAMES ".$chan);
 						pitc_raw("MODE {$chan}");
 					}
-					$core->internal($colors->getColoredString("  * ".$nick." {$lng['SETS_MODE']}: ".$message,"green"));
+					$core->internal($colors->getColoredString(" [{$chan}] * ".$nick." {$lng['SETS_MODE']}: ".$message,"green"));
 				}
 				else if (isset($irc_data[1]) && $irc_data[1] == "JOIN") {
 					// Joined to a channel.
@@ -616,6 +643,7 @@ while (1) {
 					else {
 						$channel = trim($irc_data[2]);
 					}
+					$chan = $channel;
 					$channel = strtolower($channel);
 					$ex = explode("!",$irc_data[0]);
 					$nick = substr($ex[0],1);
@@ -626,13 +654,13 @@ while (1) {
 						$windows[$channel] = $channel;
 						pitc_raw("MODE {$channel}");
 						$userlist[$channel] = array();
-						$core->internal($colors->getColoredString("  * {$lng['JOIN_SELF']} ".trim($channel),"green"));
+						$core->internal($colors->getColoredString(" [{$chan}] * {$lng['JOIN_SELF']} ".trim($channel),"green"));
 					}
 					else {
 						// Someone else did.
-						$core->internal($colors->getColoredString("  * ".$nick." (".$ex[1].") {$lng['JOIN_OTHER']} ".$channel,"green"));
+						$core->internal($colors->getColoredString(" [{$chan}] * ".$nick." (".$ex[1].") {$lng['JOIN_OTHER']} ".$channel,"green"));
 						// Recapture the userlist.
-						echo "Resetting the userlist in {$channel}\n";
+						$core->internal(" [{$chan}] Resetting the userlist in {$channel}");
 						$userlist[$channel] = array();
 						pitc_raw("NAMES ".$channel);
 					}
@@ -648,17 +676,17 @@ while (1) {
 					}
 				}
 				else if (isset($irc_data[1]) && $irc_data[1] == "PART") {
-					$channel = $irc_data[2];
+					$channel = trim($irc_data[2]);
 					$ex = explode("!",$irc_data[0]);
 					$nick = substr($ex[0],1);
 					if ($nick != $cnick) {
 						if (isset($irc_data[3])) {
 							$message = array_slice($irc_data, 3);
 							$message = substr(implode(" ",$message),1);
-							$scrollback[$channel][] = $colors->getColoredString("  * ".$nick." (".$ex[1].") {$lng['PARTED']} ".$channel." (".$message.")","green");
+							$scrollback[$channel][] = $colors->getColoredString(" [{$channel}] * ".$nick." (".$ex[1].") {$lng['PARTED']} ".$channel." (".$message.")","green");
 						}
 						else {
-							$scrollback[$channel][] = $colors->getColoredString("  * ".$nick." (".$ex[1].") {$lng['PARTED']} ".$channel,"green");
+							$scrollback[$channel][] = $colors->getColoredString(" [{$channel}] * ".$nick." (".$ex[1].") {$lng['PARTED']} ".$channel,"green");
 						}
 					}
 					// Repopulate the Userlist.
@@ -680,7 +708,7 @@ while (1) {
 					}
 				}
 				else if (isset($irc_data[1]) && $irc_data[1] == "KICK") {
-					$channel = $irc_data[2];
+					$chan = trim($irc_data[2]);
 					$ex = explode("!",$irc_data[0]);
 					$kicker = substr($ex[0],1);
 					$kicked = $irc_data[3];
@@ -688,10 +716,10 @@ while (1) {
 						if (isset($irc_data[4])) {
 							$message = array_slice($irc_data, 4);
 							$message = substr(implode(" ",$message),1);
-							$scrollback[$channel][] = $colors->getColoredString("  * ".$kicked." {$lng['KICK_OTHER']} ".$kicker." (".$message.")","green");
+							$scrollback[$channel][] = $colors->getColoredString(" [{$chan}] * ".$kicked." {$lng['KICK_OTHER']} ".$kicker." (".$message.")","green");
 						}
 						else { // %5 chance of this ever been used. but hey still could be!
-							$scrollback[$channel][] = $colors->getColoredString("  * ".$kicked." {$lng['KICK_OTHER']} ".$kicker,"green");
+							$scrollback[$channel][] = $colors->getColoredString(" [{$chan}] * ".$kicked." {$lng['KICK_OTHER']} ".$kicker,"green");
 						}
 					}
 					else {
@@ -699,14 +727,13 @@ while (1) {
 						if (isset($irc_data[4])) {
 							$message = array_slice($irc_data, 4);
 							$message = substr(implode(" ",$message),1);
-							$scrollback['0'][] = $colors->getColoredString("  * ".$kicker." {$lng['KICK_SELF']} ".$channel." (".$message.")","green");
+							$core->internal($colors->getColoredString(" [{$chan}] * ".$kicker." {$lng['KICK_SELF']} ".$chan." (".$message.")","green"));
 						}
 						else {
-							$scrollback['0'][] = $colors->getColoredString("  * ".$kicked." {$lng['KICK_SELF']} ".$channel,"green");
+							$core->internal($colors->getColoredString(" [{$chan}] * ".$kicked." {$lng['KICK_SELF']} ".$chan,"green"));
 						}
 						$active = 0;
-						unset($windows[$wid], $scrollback[$channel],$userlist[$channel]);
-						array_values($windows);
+						unset($scrollback[$channel],$userlist[$channel]);
 					}
 				}
 				else if (isset($irc_data[1]) && $irc_data[1] == "QUIT") {
@@ -716,7 +743,7 @@ while (1) {
 						// Not me.
 						$message = array_slice($irc_data, 2);
 						$message = substr(implode(" ",$message),1);
-						$string = $colors->getColoredString("  * ".$nick." (".$ex[1].") {$lng['QUIT']} (".$message.")","blue");
+						$string = $colors->getColoredString(" [SELF] * ".$nick." (".$ex[1].") {$lng['QUIT']} (".$message.")","blue");
 						
 						$matches = 0;
 						foreach ($windows as $channel) {
@@ -739,9 +766,14 @@ while (1) {
 					}
 				}
 				else {
-					$message = array_slice($irc_data, 3);
-					$message = substr(implode(" ",$message),1);
-					$core->internal($message);
+					$str = implode(chr(32),$irc_data);
+					if (strpos($str,":")) {
+						$core->internal(" [{$_PITC['network']}] ".substr($str,strpos($str,":")));
+					} else {
+						$message = array_slice($irc_data, 3);
+						$message = implode(" ",$message);
+						$core->internal(" [{$_PITC['network']}] ".$message);
+					}
 				}
 			}
 		}
@@ -755,7 +787,11 @@ function pitcError($errno, $errstr, $errfile, $errline) {
 	global $active,$core;
 	// Dirty fix to supress connection issues for now.
 	if ($errline != 171) {
-		$core->internal("PITC PHP Error: (Line ".$errline.") [$errno] $errstr in $errfile\n");
+		if (!isset($core)) {
+			echo "PITC PHP Error: (Line ".$errline.") [$errno] $errstr in $errfile\n";
+		} else {
+			$core->internal("PITC PHP Error: (Line ".$errline.") [$errno] $errstr in $errfile");
+		}
 	}
 }
 function pitcFatalError() {
@@ -769,7 +805,11 @@ function pitcFatalError() {
 		$errline = $error["line"];
 		$errstr  = $error["message"];
 		if ($errline != 171) {
-			$core->internal("PITC PHP FATAL Error: (Line ".$errline.") [$errno] $errstr in $errfile");
+			if (!isset($core)) {
+				echo "PITC PHP FATAL Error: (Line ".$errline.") [$errno] $errstr in $errfile\n";
+			} else {
+				$core->internal("PITC PHP FATAL Error: (Line ".$errline.") [$errno] $errstr in $errfile");
+			}
 			shutdown("Fatal PITC Error! Please refer to your terminal.\n"); // Lets us perform vital stuff including API Calls before shutting down!
 		}
 	}

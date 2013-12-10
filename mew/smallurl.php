@@ -56,6 +56,7 @@ class SmallURL {
 	}
 	private function push_request($data = array('action'=>'shorten')) {
 		// This simply pushes data to the API and retrieves it.
+		global $api;
 		$key = $this->key;
 		if ($key != false) {
 			// Key is preset, otherwise we override it with a validation.
@@ -68,9 +69,9 @@ class SmallURL {
 		}
 		$query = implode("&",$query);
 		$query_url = "http://api.smallurl.in/?".$query;
-		echo "Querying ".$query_url."\n";
+		$api->log(" [SmallURL] Querying ".$query_url);
 		$reply = file_get_contents($query_url);
-		echo $reply;
+		$api->log(" [SmallURL] ".$reply);
 		return unserialize($reply);
 	}
 	private function validate_key($given,$sup = false) {

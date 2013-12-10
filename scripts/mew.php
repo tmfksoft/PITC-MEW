@@ -1,6 +1,6 @@
 <?php
 /* #########################################
- * #       PITC-Bots AI 'mew' v0.1         #
+ * #       PITC-Bots AI 'mew' v1.4         #
  * #      Created by Thomas Edwards        #
  * #            Copyright 2013             #
  * # http://github.com/TMFKSOFT/PITC-MEW/  #
@@ -10,27 +10,26 @@
 $admin = "Fudgie"; // CHANGEMEEE to your nickname, Case matters!
 date_default_timezone_set("Europe/London"); // Set it to your or comment out for the System Time
 $debug = true; // Make mew spit out verbose data?
-$smallurl_key = "47a236f2a858808b7ebcbe84fe0536d3"; // Leave blank or set to false if you dont have one.
-
-$api->log(" Loading mew ^~^");
+$smallurl_key = "Put yours here!"; // Leave blank or set to false if you dont have one.
+$api->log(" [MEW] Loading mew ^~^");
 $api->addTextHandler("my_text");
 $api->addActionHandler("my_action");
 $api->addShutdownHandler("mew_quit");
 $api->addConnectHandler("mew_connect");
-$api->log(" Loading Twitter API");
-require_once('data/twitter/twitteroauth.php');
-$api->log(" Loading SmallURL API");
-require_once('data/smallurl.php');
+$api->log(" [MEW] Loading Twitter API");
+require_once('mew/twitter/twitteroauth.php');
+$api->log(" [MEW] Loading SmallURL API");
+require_once('mew/smallurl.php');
 if (isset($SmallURL)) {
-	$api->log(" Loaded SmallURL Api!");
+	$api->log(" [SmallURL] Loaded SmallURL Api!");
 	if ($smallurl_key != "" && $smallurl_key != false) {
 		$smres = $SmallURL->init($smallurl_key);
 		if (is_array($smres)) {
 			$api->log($smres['msg']);
 			unset($SmallURL); // Unload.
-			$api->log(" Unloaded SmallURL API!");
+			$api->log(" [SmallURL] Unloaded SmallURL API!");
 		} else {
-			$api->log(" Supplied key is correct!");
+			$api->log(" [SmallURL] Supplied key is correct!");
 		}
 	}
 }
@@ -74,7 +73,6 @@ $locations = array();
 $self = array();
 $self['asleep'] = true;
 $self['overlay'] = "0";
-$self['ver'] = "1.3";
 
 // some DB stuff
 $jokes = array();
@@ -82,29 +80,29 @@ $_TWITTER = array();
 
 // Load the databases
 load_mew_db();
+// We have to override.
+$self['ver'] = "1.4";
 
 $regexes = array();
 mew_reindex();
 
-// Twitter Stuff - Your App!
-$_TWITTER['consumerkey'] = "wtgySwyUZZx42dCe5FAng";
-$_TWITTER['consumersecret'] = "fhdS2mIrJB7ww2g3ilNK4Nieoksm2I3GYzBtZ8";
+// Twitter Stuff
+$_TWITTER['consumerkey'] = "changeme";
+$_TWITTER['consumersecret'] = "changeme";
 // Twitter stuffs
 if (!isset($_TWITTER['users'])) {
 	$_TWITTER['users'] = array();
 }
-// Your Twitter
-$twitter_name = "TMFKSOFT"; // Change to yours. Remove to disable Twitter.
-if (isset($twitter_name)) {
-	if (!isset($_TWITTER['users'][$twitter_name])) {
-		$_TWITTER['users'][$twitter_name] = array();
-	}
-	// Change all this.
-	$_TWITTER['users'][$twitter_name]['accesstoken'] = "changeme";
-	$_TWITTER['users'][$twitter_name]['accesstokensecret'] = "changeme";
-	$_TWITTER['users'][$twitter_name]['channels'] = array("#tmfksoft");
-	$_TWITTER['users'][$twitter_name]['nick'] = $admin; // Unused currently.
+
+// Yourself
+// Change TMFKSOFT to your Screenname
+if (!isset($_TWITTER['users']['TMFKSOFT'])) {
+	$_TWITTER['users']['TMFKSOFT'] = array();
 }
+$_TWITTER['users']['TMFKSOFT']['accesstoken'] = "changeme";
+$_TWITTER['users']['TMFKSOFT']['accesstokensecret'] = "changeme";
+$_TWITTER['users']['TMFKSOFT']['channels'] = array("#mychan"); // Channels to send tweets to
+$_TWITTER['users']['TMFKSOFT']['nick'] = $admin; // Your Nick
 
 function mew_connect() {
 	global $api,$timer,$self;
@@ -115,12 +113,16 @@ function mew_connect() {
 	//$timer->addTimer("300",true,"twitter_check"); // Every 5mins
 	$timer->addTimer("120",true,"twitter_check"); // Every 2mins
 }
+function mew_ver() {
+	global $append,$version,$self;
+	return "PITC{$append} v{$version} running MEW v{$self['ver']}";
+}
 function mew_sleep_check() {
 	global $api,$self,$emotion,$mew;
-	echo " [mew] Firing mew's sleep check.\n";
+	$api->log(" [MEW] Firing mew's sleep check.");
 	$chan = "lobby";
 	if ($self['asleep'] == "true" && $emotion->get('sleepy') == 0) {
-		echo "Wakey time \n";
+		$api->log(" [MEW] Wakey time!");
 		$api->action("#lobby","awakens");
 		$api->msg("#lobby",smile('happy',false));
 		$self['asleep'] = false;
@@ -163,7 +165,7 @@ function mew_sleep_check() {
 	if ($mew->get('attention')) {
 		if ($mew->get('attention_time') <= time()) {
 			// Lose interest from the user.
-			echo $mew->get('attention_nick')." hasn't spoken to me for a while..\n";
+			$api->log(" [MEW] {$mew->get('attention_nick')} hasn't spoken to me for a while..");
 			$mew->set('attention',false);
 			$mew->del('attention_nick');
 			$mew->del('attention_time');
@@ -275,7 +277,7 @@ function my_action_old($args) {
 	}
 }
 function my_action($args) {
-	global $api,$chan_api,$scripting,$script,$scripter,$_CONFIG,$cnick,$admin;
+	global $api,$chan_api,$scripting,$script,$scripter,$cfg,$cnick,$admin;
 	$chan = $args['channel'];
 	$nick = $args['nick'];
 	$me = $cnick;
@@ -302,7 +304,7 @@ function my_action($args) {
 
 }
 function my_text($args) {
-	global $api,$chan_api,$scripting,$script,$scripter,$_CONFIG,$cnick,$admin;
+	global $api,$chan_api,$scripting,$script,$scripter,$cfg,$cnick,$admin;
 	$chan = $args['channel'];
 	$nick = $args['nick'];
 	$me = "mew";
@@ -338,62 +340,59 @@ function mew_command($data) {
 	$me = $data['me'];
 	$type = $data['type'];
 
-// Check if someone has my attention or has said my name
-$mel = strtolower($me); // Lowercase version of $me
-$first = strtolower($message[0]); // Lowercase first word.
-$last = strtolower($message[count($message)-1]);
+	// Check if someone has my attention or has said my name
+	$mel = strtolower($me); // Lowercase version of $me
+	$first = strtolower($message[0]); // Lowercase first word.
+	$last = strtolower($message[count($message)-1]);
 
-if ($mew->get('attention') || ($mel == $first || $mel == $last) && isset($message[1]) ) {
-	if ($mew->get('attention_nick') == $nick && ($first != $mel || $last !=  $mel || !array_search($nick,$message))) {
-		// First word isnt my name but the person who said it has my attention.
-		echo "{$nick} has my attention and said something\n";
-		$scentence = implode(chr(32),$message);
-	}
-	else {
-		echo "{$nick} doesnt have my attention but said my name\n";
-		if ($type == "message") {
-			$scentence = implode(chr(32),array_slice($message,1));
-		} else {
-			$scentence = implode(chr(32),array_slice($message,0,-1));
+	if ($mew->get('attention') || ($mel == $first || $mel == $last) && isset($message[1]) ) {
+		if ($mew->get('attention_nick') == $nick && ($first != $mel || $last !=  $mel || !array_search($nick,$message))) {
+			// First word isnt my name but the person who said it has my attention.
+			$api->log(" [MEW] {$nick} has my attention and said something.");
+			$scentence = implode(chr(32),$message);
 		}
-	}
-	// Cycle my snippets for the trigger
-	$triggered = false;
-	$reg = $regexes[$type];
-	foreach ($reg as $snip) {
-		if ($debug) {
-			echo "Checking regex: {$snip['regex']}\n";
-		}
-		if (preg_match("/{$snip['regex']}/i",$scentence,$matches) && !$triggered) {
-		
-			if ($mew->get('attention') && $mew->get('attention_nick') == $nick) {
-				$mew->set('attention_time',time()+60);
+		else {
+			$api->log(" [MEW] {$nick} doesnt have my attention but said my name.");
+			if ($type == "message") {
+				$scentence = implode(chr(32),array_slice($message,1));
+			} else {
+				$scentence = implode(chr(32),array_slice($message,0,-1));
 			}
-			echo "Found ".count($matches)." matches: '".implode(":",$matches)."'\n";
-			eval(base64_decode($snip['code']));
-			$triggered = true;
+		}
+		// Cycle my snippets for the trigger
+		$triggered = false;
+		$reg = $regexes[$type];
+		foreach ($reg as $snip) {
+			if ($debug) {
+				$api->log(" [MEW] Checking '{$type}' regex: {$snip['regex']}");
+			}
+			if (preg_match("/{$snip['regex']}/i",$scentence,$matches) && !$triggered) {
+			
+				if ($mew->get('attention') && $mew->get('attention_nick') == $nick) {
+					$mew->set('attention_time',time()+60);
+				}
+				$api->log(" [MEW] Found ".count($matches)." matches: '".implode(":",$matches)."'");
+				eval(base64_decode($snip['code']));
+				$triggered = true;
+			}
 		}
 	}
-}
-else if ($mel == $first && !isset($message[1])) {
-	// Some only said my name
-	echo $nick." got my devoted attention!\n";
-	$ack = array();
-	$ack[] = "mhm";
-	$ack[] = "yup";
-	$ack[] = "yeah";
-	$ack[] = "yus";
-	$ack[] = "yes";
-	$ack = $ack[array_rand($ack)];
-	$api->msg($chan,$ack." ".smile()."?");
-	$mew->set('attention',true);
-	$mew->set('attention_nick',$nick);
-	$mew->set('attention_time',time()+60);
-} 
-
-
-
-
+	else if ($mel == $first && !isset($message[1])) {
+		// Some only said my name
+		$api->log(" [MEW] {$nick} got my devoted attention!");
+		$ack = array();
+		$ack[] = "mhm";
+		$ack[] = "yup";
+		$ack[] = "yeah";
+		$ack[] = "yus";
+		$ack[] = "yes";
+		$ack = $ack[array_rand($ack)];
+		$api->msg($chan,$ack." ".smile()."?");
+		$mew->set('attention',true);
+		$mew->set('attention_nick',$nick);
+		$mew->set('attention_time',time()+60);
+	} 
+	// End of mew_command
 }
 function smile($emote = "happy",$update = true) {
 	global $happy_smile,$sad_smile,$confused_smile,$emotion;
@@ -443,30 +442,51 @@ function load_mew_db() {
 	
 	$db = load_database("twitter");
 	if ($db) { $_TWITTER = $db; }
-	echo "Loaded Mew's databases\n";
+	global $api;
+	$api->log(" [MEW] Loaded Mew's databases");
 }
 function load_database($name) {
-	if (file_exists("data/mew_{$name}.db")) {
-		return json_decode(file_get_contents("data/mew_{$name}.db"),true);
+	global $db,$api;
+	$result = $db->load("mew_{$name}");
+	if ($result) {
+		return $db->select("mew_{$name}");
 	}
 	else {
+		$api->log(" [MEW] Error loading mew_{$name}.db! See console.\n");
 		return false;
-		echo "Error loading mew_{$name}.db! Database dont exist!\n";
 	}
 }
 function save_mew_db() {
-	global $mood,$buried,$u_data,$self,$jokes,$_TWITTER;
+	global $mood,$buried,$u_data,$self,$jokes,$_TWITTER,$api;
 	// Save mew's databases.
-	save_database($mood,"mood");
-	save_database($buried,"buried");
-	save_database($u_data,"users");
-	save_database($self,"self");
-	save_database($jokes,"jokes");
-	save_database($_TWITTER,"twitter");
-	echo "Saved Mew's databases.\n";
+	$res = array();
+	
+	$res[] = save_database($mood,"mood");
+	$res[] = save_database($buried,"buried");
+	$res[] = save_database($u_data,"users");
+	$res[] = save_database($self,"self");
+	$res[] = save_database($jokes,"jokes");
+	$res[] = save_database($_TWITTER,"twitter");
+	
+	$good = 0;
+	foreach ($res as $a) {
+		if ($a) {
+			$good++;
+		}
+	}
+	if ($good == count($res)) {
+		$api->log(" [MEW] Saved Databases.");
+		return true;
+	} else {
+		$api->log(" [MEW] Error saving databases. Please check the console.");
+		return false;
+	}
 }
 function save_database($data,$name) {
-	file_put_contents("data/mew_".$name.".db",json_encode($data));
+	global $db;
+	$r = $db->replace("mew_{$name}",$data);
+	$r = $db->save("mew_{$name}");
+	return $r;
 }
 class weather {
 	public function get($postcode) {
@@ -480,7 +500,8 @@ class weather {
 	}
 }
 function mew_quit() {
-	echo "PITC is closing. Performing vital tasks!\n";
+	global $api;
+	$api->log(" [MEW] PITC is closing. Saving mew's data!");
 	save_mew_db();
 }
 
@@ -539,18 +560,18 @@ function mew_reindex($loud = false) {
 	return array("action"=>$act,"message"=>$msg);
 }
 function mew_index($type,$loud = false) {
-	global $regexes;
+	global $regexes,$api;
 	if (!isset($regexes[$type])) {
 		$regexes[$type] = array();
 	}
 	$current = count($regexes[$type]);
 	
-	echo "(Re)loading mew {$type} core.\n";
-	$file = "data/{$type}.core.mew";
+	$api->log(" [MEW] (Re)loading mew {$type} core.");
+	$file = "mew/{$type}.core.mew";
 	if (file_exists($file)) {
 		$core = file_get_contents($file);
 	} else {
-		echo "The file '{$file}' does not exist!\n";
+		$api->log(" [MEW] The file '{$file}' does not exist!");
 		return false;
 	}
 	$err = array();
@@ -558,7 +579,7 @@ function mew_index($type,$loud = false) {
 	$xml = @simplexml_load_string($core);
 	if ($xml) {
 		if ($loud) {
-			echo "To turn off loud output start with false param.\n";
+			$api->log(" [MEW] To turn off loud output start with false param.");
 		}
 		$regexes[$type] = array();
 		foreach ($xml->snippet as $dat) {
@@ -577,39 +598,39 @@ function mew_index($type,$loud = false) {
 			$code['code'] = base64_encode($dat->code);
 			
 			if ($loud) {
-				echo "Code name is {$name}\n";
+				$api->log(" [MEW] Code name is {$name}");
 			}
 			$regexes[$type][$name] = $code;
 		}
 		
-		echo "{$type} core (re)loaded with: ".count($err)." errors and ".count($regexes[$type])." snippets!\n";
+		$api->log(" [MEW] {$type} core (re)loaded with: ".count($err)." errors and ".count($regexes[$type])." snippets!");
 	}
 	else {
 		foreach (libxml_get_errors() as $errstr) {
 			$err[] = $errstr;
 		}
-		echo "Encountered ".count($err)." errors while (re)loading {$type} core. Aborted reload.\n";
+		$api->log(" [MEW] Encountered ".count($err)." errors while (re)loading {$type} core. Aborted reload.");
 		if (!$loud) {
-			echo "Run with true parameter for verbose output.\n";
+			$mew->log(" [MEW] Run with true parameter for verbose output.");
 		}
 	}
 	if (count($err) <= 5 && $loud) {
 		foreach ($err as $num => $error) {
-			echo "ERROR #{$num}: ".$error."\n";
+			$mew->log(" [MEW] ERROR #{$num}: ".$error);
 		}
 	}
 	
 	$c = $current - count($regexes[$type]);
 	if ($c > 0) {
-		echo "{$c} snippets were unloaded.\n";
+		$api->log(" [MEW] {$c} snippets were unloaded.");
 	}
 	else if ($c < 0) {
-		echo abs($c)." snippets were loaded.\n";
+		$api->log(" [MEW] ".abs($c)." snippets were loaded.");
 	}
 	if (count($err) > 0) {
 		global $mew;
 		$mew->set('errors',$err);
-		echo "All ".count($err)." errors have been stored is self variable 'errors'!\n";
+		$api->log(" [MEW] All ".count($err)." errors have been stored is self variable 'errors'!");
 	}
 	return $err;
 }
@@ -680,12 +701,13 @@ class mew_core {
 		save_mew_db();
 	}
 }
-function yt_get($id) {	
+function yt_get($id) {
+	global $api;
 	$feed = file_get_contents("http://gdata.youtube.com/feeds/api/videos/{$id}?alt=rss&v=1");
 	$dom = new DOMDocument;
 	$dom->loadXML($feed);
 	if (!$dom) {
-		echo 'Error while parsing the document';
+		$api->log(" [MEW] Error while parsing the document");
 		exit;
 	}
 	$xml = simplexml_import_dom($dom);
@@ -772,7 +794,7 @@ function getConnectionWithAccessToken($cons_key, $cons_secret, $oauth_token, $oa
 }
 function twitter_check() {
 	global $_TWITTER,$api,$SmallURL;
-	$api->log(" Checking Twitter!");
+	$api->log(" [MEW] Checking Twitter!");
 	foreach ($_TWITTER['users'] as $uname => $data) {
 		$tweets = get_tweets($uname);
 		if (!isset($data['lasttweet'])) {
@@ -797,7 +819,7 @@ function twitter_check() {
 			}
 			$_TWITTER['users'][$uname]['lasttweet'] = $last;
 		} else {
-			$api->log($uname.":{$data['nick']} has no new Tweets.");
+			$api->log(" [MEW] ".$uname.":{$data['nick']} has no new Tweets.");
 		}
 	}
 }

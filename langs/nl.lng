@@ -1,4 +1,4 @@
-Dutch version Andy "ChUcKst3r" Breton
+//Dutch version Andy "ChUcKst3r" Breton
 
 // Missing Files Messages
 $lng['MSNG_API'] = "Ontbrekend kern bestand: api.php, Heb je ALLE bestanden uitgepakt?";
@@ -9,7 +9,7 @@ $lng['NEWER'] = "Er is een nieuwere versie van PITC beschikbaar!";
 $lng['RUNUPDATE'] = "Voer het update script uit om te updaten!";
 
 // Auto Load
-$lng['AUTO_ERROR'] = "ERROR Automagisch Laden";
+$lng['AUTO_ERROR'] = "ERROR Automatisch Laden";
 $lng['NOSUCHFILE'] = "bestand niet gevonden!";
 
 // Misc

@@ -1,9 +1,19 @@
 <?php
+// PITCBots CORE
+$pitc_log = array();
 class core {
-	public function internal($text) {
-		global $rawlog;
-		$rawlog[] = $text;
-		echo $text."\n";
+	public function internal($text,$type = "CORE") {
+		global $pitc_log;
+		if ($type == "CORE") {
+			$str = " [{$type}] ".$text;
+		} else {
+			$str = "  [{$type}] ".$text;
+		}
+		$pitc_log[] = $str;
+		//ob_end_clean();
+		echo $str."\n";
+		//ob_start();
+		$this->writeLog();
 	}
 	public function lang($item) {
 		global $lng;
@@ -13,8 +23,143 @@ class core {
 			return false;
 		}
 	}
+	public function writeLog($raw = false) {
+		global $pitc_log,$rawlog;
+		// Our Log Stamp
+		$stamp = date('d-m-Y');
+		
+		// load in the previous log.
+		if ($raw) {
+			if (file_exists("logs/{$stamp}-raw.log")) {
+				$log = explode("\n",file_get_contents("logs/{$stamp}-raw.log"));
+			} else {
+				$log = array();
+			}
+		} else {
+			if (file_exists("logs/{$stamp}.log")) {
+				$log = explode("\n",file_get_contents("logs/{$stamp}.log"));
+			} else {
+				$log = array();
+			}
+		}
+		
+		// Merge old data with new. IF there is any old.
+		$data = array();
+		if (count($log) >= 1) {
+			foreach ($log as $old) {
+				$data[] = trim($old);
+			}
+		}
+		if ($raw) {
+			foreach ($rawlog as $new) {
+				$data[] = trim($new);
+			}
+		} else {
+			foreach ($pitc_log as $new) {
+				if (preg_match("/\[(.*)\] \[[0-9]+;[0-9]+m (.*)\[0m/",$new,$matches)) {
+					$str = trim("[{$matches[1]}]  {$matches[2]}");
+				} else {
+					$str = trim($new);
+				}
+				$data[] = trim($str,"");
+			}
+		}
+		
+		if (!file_exists("logs") || !is_dir("logs")) {
+		
+			if (!file_exists("logs/")) {
+				$dir = "logs";
+				mkdir("logs/");
+			} else if (!is_dir("logs/")) {
+				$dir = "logs_pitc";
+				if (!file_exists("logs_pitc/")) {
+					mkdir("logs/");
+				} else if (is_file("logs_pitc/")) {
+					echo "Unable to init log!\n";
+				}
+			}
+			
+		} else {
+			$dir = "logs";
+		}
+		if ($raw) {
+			$rawlog = array();
+			file_put_contents($dir."/".$stamp."-raw.log",implode("\n",$data));
+		} else {
+			$pitc_log = array();
+			file_put_contents($dir."/".$stamp.".log",implode("\n",$data));
+		}
+	}
+	public function spoon() {
+		return "There is no spoon.";
+	}
+	public function userlist($chan) {
+		$userlist = new userlist($chan);
+		return $userlist;
+	}
+	public function user($nick) {
+		return new users($nick);
+	}
 }
 $core = new core;
+class userlist {
+	public $channel = null;
+	function __construct($chan) {
+		global $api;
+		$api->log("Construct called");
+		$this->channel = $chan;
+	}
+	public function append($channel,$user) {
+	
+	}
+	public function remove($channel,$user) {
+	}
+	public function clear($channel,$user) {
+	
+	}
+	public function get() {
+		return array("channel"=>$this->channel);
+	}
+}
+class users {
+	public $username = null;
+	function __construct($uname) {
+		global $_PITC;
+		$this->username = $uname;
+		if (isset($_PITC['users'][md5(strtolower($uname))])) {
+			foreach ($_PITC['users'][md5(strtolower($uname))] as $var => $val) {
+				echo "Setting $"."this->{$var} to {$val}\n";
+				if (!is_array($val)) {
+					echo "$var is str\n";
+					eval('$this->'.$var.' = "'.$val.'";');
+				} else {
+					echo "$var is arry\n";
+					eval('$this->'.$var.' = json_decode(\''.json_encode($val).'\',true);');
+				}
+			}
+		}
+	}
+	function add($data = array()) {
+		global $_PITC;
+		$data['nick'] = $this->username;
+		$_PITC['users'][md5(strtolower($this->username))] = $data;
+	}
+	function hostmask($host = false) {
+		global $_PITC;
+		if (!$host) {
+			// Return mask
+			$host = $_PITC['users'][md5(strtolower($this->username))]['host'];
+			return $host;
+		} else {
+			// Set mask
+			$_PITC['users'][md5(strtolower($this->username))]['host'] = $host;
+			return true;
+		}
+	}
+}
+$_PITC['users'] = array();
+
+// PITCBots API
 class pitcapi {
 	public function log($text = false) {
 		global $core,$cserver;
@@ -22,7 +167,7 @@ class pitcapi {
 			die("{$core->lang('API_ERROR_MISSING')} TEXT {$core->lang('API_INFUNC')} LOG");
 		}
 		else {
-			$core->internal($text);
+			$core->internal($text,"API");
 		}
 	}
 	public function getHost($nick = false) {

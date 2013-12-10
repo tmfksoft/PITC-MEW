@@ -26,7 +26,9 @@ function shutdown($message = "Shutdown",$isexec = false) {
 		call_user_func($api_stop[$x],$args);
 		$x++;
 	}
-	
+	global $cfg;
+	// Save any changes to the config
+	$cfg->save("core");
 	if (isset($sid)) {
 		system("stty sane");
 		pitc_raw("QUIT :Leaving...");
@@ -41,23 +43,23 @@ function shutdown($message = "Shutdown",$isexec = false) {
 }
 
 function connect($nick,$address,$port,$ssl = false,$password = false) {
-	global $_CONFIG,$domain,$sasl,$api,$core;
+	global $cfg,$domain,$sasl,$api,$core;
 	if ($ssl) { $address = "ssl://".$address; }
 	$core->internal(" ## Connecting to {$address} on port {$port} ##");
 	$fp = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
-	if (isset($_CONFIG['bindip'])) {
-		socket_bind($fp,$_CONFIG['bindip']);
+	if ($cfg->get("core","bindip")) {
+		socket_bind($fp,$cfg->get("core","bindip"));
 	}
 	//$fp = @fsockopen($address,$port, $errno, $errstr, 5);
 	$result = @socket_connect($fp,$address,$port);
 	if ($result) {
-		if (isset($_CONFIG['sasl'])) {
-			if (strtolower($_CONFIG['sasl']) == "y") { pitc_raw("CAP REQ :sasl",$fp); }
+		if ($cfg->get("core","sasl")) {
+			if (strtolower($cfg->get("core","sasl")) == "y") { pitc_raw("CAP REQ :sasl",$fp); }
 		}
 		if ($password) { pitc_raw("PASS :".$password,$fp); }
 		pitc_raw("NICK ".$nick,$fp);
-		$ed = explode("@",$_CONFIG['email']);
-        pitc_raw('USER '.$ed[0].' "'.$ed[1].'" "'.$address.'" :'.$_CONFIG['realname'],$fp);
+		$ed = explode("@",$cfg->get("core","email"));
+        pitc_raw('USER '.$ed[0].' "'.$ed[1].'" "'.$address.'" :'.$cfg->get("core","realname"),$fp);
 		return $fp;
 	}
 	else {
@@ -66,14 +68,15 @@ function connect($nick,$address,$port,$ssl = false,$password = false) {
 	}
 }
 function parse($rid) {
-	global $core,$active,$_CONFIG,$cnick,$rawlog;
+	global $core,$active,$cfg,$cnick,$rawlog;
 	//echo "Handling bot with RID ".$rid."\n";
 	if ($data = socket_read($rid,2048)) {
 		$data = trim($data);
-		$rawlog[] = "S: ".$data;
+		$core->writeLog(true);
 		flush();
 		$lines = explode("\n",$data);
 		foreach ($lines as $line) {
+			$rawlog[] = "S: ".$line;
 			$ex = explode(' ', $line);
 			if ($ex[0] == "PING") {
 				//$core->internal(" LINE ".__LINE__." DEBUG: PONG Reply");
@@ -82,8 +85,8 @@ function parse($rid) {
 			if (isset($ex[1]) && $ex[1] == "001") {
 				$core->internal(" = Connected to IRC! =");
 				// Ajoin!
-				if (isset($_CONFIG['ajoin'])) {
-					$chans = explode(" ",$_CONFIG['ajoin']);
+				if ($cfg->get("core","ajoin")) {
+					$chans = explode(" ",$cfg->get("core","ajoin"));
 					$rawjoin = "JOIN ";
 					foreach ($chans as $x => $chan) {
 						if ($x != count($chans)-1) {
@@ -93,13 +96,14 @@ function parse($rid) {
 							$rawjoin .= $chan;
 						}
 					}
+					$core->internal(" Attempting to automatically join {$chan}.");
 					pitc_raw($rawjoin);
 				}
 			}
 			if (isset($ex[1]) && $ex[1] == "433") {
 				// Nick in use.
 				$core->internal(" = Nick in use. Changing to alternate nick! =");
-				$cnick = $_CONFIG['altnick'];
+				$cnick = $cfg->get("core","altnick");
 				pitc_raw("NICK :".$cnick);
 			}
 		}
@@ -107,10 +111,11 @@ function parse($rid) {
 	return $data;
 }
 function pitc_raw($text,$sock = false) {
-	global $sid,$rawlog;
+	global $sid,$rawlog,$core;
 	if ($sock) { $fp = $sock; }
 	else { $fp = $sid; }
 	$rawlog[] = "C: {$text}";
+	$core->writeLog(true);
 	return socket_write($fp,"{$text}\n");
 }
 function load_script($file) {
@@ -135,7 +140,8 @@ function getWid($name) {
 	return strtolower($name);
 }
 function ctcpReply($nick,$ctcp,$text) {
-	global $sid;
+	global $sid,$core,$colors;
+	$core->internal($colors->getColoredString(" [".trim($nick)." ".$ctcp."] {$text}","light_red"));
 	socket_write($sid,"NOTICE ".$nick." :".$ctcp." ".$text."\n");
 }
 function ctcp($nick,$ctcp) {
@@ -264,7 +270,7 @@ function ircexplode($str) {
 }
 function data_get($url = false) {
 	if ($url) {
-		$data = file_get_contents("http://announcements.pitc.x10.mx/");
+		$data = file_get_contents($url);
 		$array = json_decode($data);
 		return $array;
 	}

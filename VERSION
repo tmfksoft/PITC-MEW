@@ -1,0 +1,4 @@
+; What version is counted as stable.
+S 1.4
+; What version is development.
+D 1.5
