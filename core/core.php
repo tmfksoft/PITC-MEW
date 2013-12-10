@@ -92,10 +92,10 @@ if ($cfg->exists("core")) {
 	$cfg->applydefault("core",$cfg->getdef("core"));
 } else {
 	$cfg->create("core",$cfg->getdef("core"));
-	$cfg->save("core");
-	$core->internal("PITC Configuration Missing!");
-	$core->internal("Default configuration created please edit configs/core.cfg");
-	die();
+	$cfg->save("core",true);
+	echo " [CORE] PITC Configuration Missing!\n";
+	echo " [CORE] Default configuration created please edit configs/core.cfg\n";
+	shutdown();
 }
 
 if ($cfg->get("core","lang") !== FALSE) {
@@ -187,6 +187,7 @@ $timer = new timer();
 include("colours.php");
 
 // Load auto scripts.
+if (isset($loaded)) { $loaded = array(); }
 if (file_exists($_SERVER['PWD']."/scripts/autoload")) {
 	$scripts = explode("\n",file_get_contents($_SERVER['PWD']."/scripts/autoload"));
 	for ($x=0;$x != count($scripts);$x++) {

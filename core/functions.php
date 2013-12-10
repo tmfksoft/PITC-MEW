@@ -18,7 +18,9 @@ function update_hostname($nick,$host = false) {
 }
 function shutdown($message = "Shutdown",$isexec = false) {
 	global $sid,$api_stop,$api,$core;
-	$api->log($core->lang('CLOSING'));
+	if (isset($api) && $api != NULL) {
+		$api->log($core->lang('CLOSING'));
+	}
 	// START Handler/Hook
 	$x = 0;
 	while ($x != count($api_stop)) {
